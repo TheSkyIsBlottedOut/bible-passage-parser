@@ -14,7 +14,7 @@
 
 
 module PassageParser
-  Ordinals = ['(?:1(?:st)*|I|First)', '(?:2(?:nd)|II|Second)', '(?:3(?:rd)|III|Third)']
+  Ordinals = ['(?:1(?:st)*|I|First)', '(?:2(?:nd)*|II|Second)', '(?:3(?:rd)*|III|Third)']
   Books = {
     'Genesis'         => 'G(?:e|n|en)(?:esis)*',
     'Exodus'          => 'Ex(?:od*(?:us)*)*',
@@ -23,7 +23,7 @@ module PassageParser
     'Deuteronomy'     => 'D(?:eu)*t(?:eronomy)*',
     'Joshua'          => 'Jo*sh*(?:ua)*',
     'Judges'          => 'Ju*d*ge*s*',
-    'Ruth'            => 'R(?:u|th)',
+    'Ruth'            => 'R(?:u|th|uth)*',
     '1 Samuel'        => '#1 S(?:a|am|m)(?:uel)*',
     '2 Samuel'        => '#2 S(?:a|am|m)(?:uel)*',
     '1 Kings'         => '#1 Ki*n*g*s*',
@@ -34,9 +34,9 @@ module PassageParser
     'Nehemiah'        => 'Neh*(?:emiah)*',
     'Esther'          => 'Es(?:th(?:er)*)*',
     'Job'             => 'Jo*b',
-    'Psalms'          => 'Ps(?:a|m|ss|lm|alms*)*',
+    'Psalms'          => 'Ps(?:alms*|lm|a|m|ss)*',
     'Proverbs'        => 'Pro*v*(?:erbs*)*',
-    'Ecclesiastes'    => '(Ec(?:cles(?:iastes))|Qoh(?:eleth)*)',
+    'Ecclesiastes'    => '(?:Ec(?:cles(?:iastes))?|Qoh(?:eleth)*)',
     # what is a canticle? i guess it is a song, or a solomon
     'Song of Solomon' => '(?:S(?:OS|o(?:ngs*(?:\sof\sSo(?:ngs|lomon)*)*))|Canticle(?:s|\sof\sCanticles)*)',
     'Isaiah'          => 'Isa*(?:iah)*',
@@ -92,24 +92,40 @@ module PassageParser
   class << self
     def regexp(book)
       pattern = ?( + Books[book].sub(/\#(\d+)/) {|s| Ordinals[s[/\d/].to_i - 1]} + ?)
-      pattern += '(?:\s+([\d\:\-]+))*'
+      pattern += '\b(?:\s+([\d\:\-]+))*'
       Regexp.new(pattern)
     end
 
     def book_order(passagetext)
+      text = passagetext.to_s.gsub(/\d+/) {|n| n.rjust(3,?0)}
       max = Books.length # 66
+      retval = {book: nil, chapter: nil, verse: nil}
+      return retval if text.empty?
       Books.keys.reverse.each_with_index do |book, idx|
-        match = passagetext.scan(regexp(book)).first
+        match = regexp(book).match(text)
         next unless match
-        puts match.inspect
-        chapter = match[1].scan(/(\d+)\:/).first
-        verse = match[1].scan(/\:(\d+)/).first
-        chapter = chapter ? chapter.first.to_i : nil
-        verse = verse ? verse.first.to_i : nil
-        retval = {book: (max - idx), chapter: chapter, verse: verse}
+        cv = match[2].to_s
+        chapter = cv.split(?:).first.to_s.scan(/\d+/).first.to_i
+        verse = cv.scan(/\:(\d+)/).first
+        chapter = (chapter > 0) ? chapter.to_i.to_s.rjust(3,?0) : nil
+        verse = verse ? verse.first.to_i.to_s.rjust(3, ?0) : nil
+        retval = {book: (max - idx).to_s.rjust(2, ?0), chapter: chapter, verse: verse, match: match[0]}
         return retval
       end
-      {book: nil, chapter: nil, verse: nil}
+      retval
+    end
+
+    def select_options
+      Books.keys.map {|x| [x, x.tokenize]}
+    end
+
+    def book_for_token(t)
+      Books.keys.select {|x| x.tokenize == t}.first
+    end
+
+    def order_for_token(t)
+      match = Books.keys.each_with_index.select {|x,i| x.tokenize == t}.first
+      match ? match.last : nil
     end
   end
 end
